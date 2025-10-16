@@ -6,14 +6,14 @@ from datetime import datetime
 
 app = FastAPI(title="Image Upload & OCR Backend")
 
-# --- DigitalOcean Spaces Configuration ---
+#DigitalOcean Spaces Configuration
 SPACES_REGION = "sgp1"  
 SPACES_NAME = "fyp-ocr" 
 SPACES_ENDPOINT = f"https://fyp-ocr.sgp1.digitaloceanspaces.com"
 ACCESS_KEY = "DO801VMU3J8Y7YG2YVW9"
 SECRET_KEY = "tgT46kZc3fFNcklULgCs1GizbkAqR9VaY+jLpvClApg"
 
-# Create a boto3 client for Spaces (S3-compatible)
+# Create a boto3 client for Spaces 
 s3_client = boto3.client(
     "s3",
     region_name=SPACES_REGION,
@@ -22,7 +22,7 @@ s3_client = boto3.client(
     aws_secret_access_key=SECRET_KEY,
 )
 
-# --- Image URL for Digital Ocean Spaces Object Storage ---
+#Image URL for Digital Ocean Spaces Object Storage 
 @app.get("/upload")
 async def generate_upload_url(filename: str):
     try:
@@ -48,7 +48,7 @@ async def generate_upload_url(filename: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# --- OCR Processing Endpoint ---
+#OCR Processing Endpoint
 @app.get("/process/{image_id}")
 async def process_image(image_id: str):
     try:
