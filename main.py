@@ -13,7 +13,7 @@ SPACES_ENDPOINT = f"https://fyp-ocr.sgp1.digitaloceanspaces.com"
 ACCESS_KEY = "DO801VMU3J8Y7YG2YVW9"
 SECRET_KEY = "tgT46kZc3fFNcklULgCs1GizbkAqR9VaY+jLpvClApg"
 
-# Create a boto3 client for Spaces 
+#Create a boto3 client for Spaces 
 s3_client = boto3.client(
     "s3",
     region_name=SPACES_REGION,
