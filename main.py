@@ -1,17 +1,21 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
+from dotenv import load_dotenv
 import boto3
 import os
 from datetime import datetime
 
+# --- Load environment variables from .env ---
+load_dotenv()
+
 app = FastAPI(title="Image Upload & OCR Backend")
 
-#DigitalOcean Spaces Configuration
-SPACES_REGION = "sgp1"  
-SPACES_NAME = "fyp-ocr" 
-SPACES_ENDPOINT = f"https://fyp-ocr.sgp1.digitaloceanspaces.com"
-ACCESS_KEY = "DO801VMU3J8Y7YG2YVW9"
-SECRET_KEY = "tgT46kZc3fFNcklULgCs1GizbkAqR9VaY+jLpvClApg"
+# --- DigitalOcean Spaces Configuration ---
+SPACES_REGION = os.getenv("SPACES_REGION")
+SPACES_NAME = os.getenv("SPACES_NAME")
+SPACES_ENDPOINT = os.getenv("SPACES_ENDPOINT")
+ACCESS_KEY = os.getenv("ACCESS_KEY")
+SECRET_KEY = os.getenv("SECRET_KEY")
 
 #Create a boto3 client for Spaces 
 s3_client = boto3.client(
