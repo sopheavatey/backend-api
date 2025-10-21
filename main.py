@@ -5,12 +5,12 @@ import boto3
 import os
 from datetime import datetime
 
-# --- Load environment variables from .env ---
+#Load environment variables from .env
 load_dotenv()
 
 app = FastAPI(title="Image Upload & OCR Backend")
 
-# --- DigitalOcean Spaces Configuration ---
+#DigitalOcean Spaces Configuration
 SPACES_REGION = os.getenv("SPACES_REGION")
 SPACES_NAME = os.getenv("SPACES_NAME")
 SPACES_ENDPOINT = os.getenv("SPACES_ENDPOINT")
