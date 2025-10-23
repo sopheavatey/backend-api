@@ -27,7 +27,7 @@ s3_client = boto3.client(
 )
 
 #Image URL for Digital Ocean Spaces Object Storage 
-@app.get("/upload")
+@app.post("/upload")
 async def generate_upload_url(filename: str):
     try:
         # Give file a unique key (path) inside the bucket
@@ -61,3 +61,11 @@ async def process_image(image_id: str):
         return {"image_id": image_id, "extracted_text": text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+# @app.get("/test")
+# async def test_image():
+#     try:
+#         Resoibs
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e) )
+
+
