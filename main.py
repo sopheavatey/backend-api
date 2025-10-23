@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 import boto3
+from botocore.exceptions import ClientError
 import os
 from datetime import datetime
 from helper.ocr import run_prediction
@@ -18,6 +19,9 @@ SPACES_NAME = os.getenv("SPACES_NAME")
 SPACES_ENDPOINT = os.getenv("SPACES_ENDPOINT")
 ACCESS_KEY = os.getenv("ACCESS_KEY")
 SECRET_KEY = os.getenv("SECRET_KEY")
+
+YOLO_MODEL_PATH = "./model/YOLO.pt"
+CRNN_CHECKPOINT_PATH = "./model/CRNN.pth"
 
 #Create a boto3 client for Spaces 
 s3_client = boto3.client(
@@ -54,20 +58,42 @@ async def generate_upload_url(filename: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-#OCR Processing Endpoint
+# OCR Processing Endpoint
 @app.get("/process/{image_id}")
 async def process_image(image_id: str):
-    try:
-        # OCR 
-        text = run_prediction("./model/YOLO.pt", "./model/CRNN.pth", f"./uploads/{image_id}")
-        return {"image_id": image_id, "extracted_text": text}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-# @app.get("/test")
-# async def test_image():
-#     try:
-#         Resoibs
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=str(e) )
+    
+    object_key = f"uploads/{image_id}" 
+    
+    local_download_dir = "./temp_downloads"
+    os.makedirs(local_download_dir, exist_ok=True)
+    local_image_path = os.path.join(local_download_dir, image_id)
 
+    try:
+        print(f"Attempting to download: {object_key} from bucket: {SPACES_NAME}")
+        s3_client.download_file(
+            SPACES_NAME,       # Bucket name
+            object_key,        # The path to the file in the bucket
+            local_image_path   # The local path to save it to
+        )
+        print(f"Successfully downloaded to: {local_image_path}")
+
+        text = run_prediction(
+            YOLO_MODEL_PATH, 
+            CRNN_CHECKPOINT_PATH, 
+            local_image_path
+        )
+        
+        return {"image_id": image_id, "extracted_text": text}
+    
+    except ClientError as e:
+        if e.response['Error']['Code'] == '404':
+            raise HTTPException(status_code=404, detail=f"File not found in Spaces: {object_key}")
+        else:
+            raise HTTPException(status_code=500, detail=f"S3 Error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Processing Error: {str(e)}")
+    finally:
+        if os.path.exists(local_image_path):
+            os.remove(local_image_path)
+            print(f"Cleaned up temporary file: {local_image_path}")
 
