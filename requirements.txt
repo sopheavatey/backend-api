@@ -1,0 +1,8 @@
+pytorch
+numpy
+ultralytics
+torchvision
+pillow
+fastapi[standard]
+python-dotenv
+boto3

@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 import boto3
 import os
 from datetime import datetime
+from helper.ocr import run_prediction
+
 
 #Load environment variables from .env
 load_dotenv()
@@ -57,7 +59,7 @@ async def generate_upload_url(filename: str):
 async def process_image(image_id: str):
     try:
         # OCR 
-        text = "OCR result placeholder"
+        text = run_prediction("./model/YOLO.pt", "./model/CRNN.pth", f"./uploads/{image_id}")
         return {"image_id": image_id, "extracted_text": text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
