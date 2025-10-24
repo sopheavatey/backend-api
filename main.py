@@ -1,19 +1,31 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
-from dotenv import load_dotenv
+# main.py
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from botocore.exceptions import ClientError
 import boto3
 from botocore.exceptions import ClientError
 import os
+import uuid
 from datetime import datetime
 from helper.ocr import run_prediction
 
 
-#Load environment variables from .env
+# Load environment variables from .env
 load_dotenv()
 
 app = FastAPI(title="Image Upload & OCR Backend")
 
-#DigitalOcean Spaces Configuration
+# CORS middleware for Next.js frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# DigitalOcean Spaces Configuration
 SPACES_REGION = os.getenv("SPACES_REGION")
 SPACES_NAME = os.getenv("SPACES_NAME")
 SPACES_ENDPOINT = os.getenv("SPACES_ENDPOINT")
@@ -32,30 +44,64 @@ s3_client = boto3.client(
     aws_secret_access_key=SECRET_KEY,
 )
 
-#Image URL for Digital Ocean Spaces Object Storage 
+
+class UploadRequest(BaseModel):
+    filename: str
+    content_type: str
+
+
 @app.post("/upload")
-async def generate_upload_url(filename: str):
+async def get_upload_url(request: UploadRequest):
+    """
+    Generate a presigned URL for uploading a file to DigitalOcean Spaces.
+    Returns both the upload URL and the public URL.
+    """
     try:
-        # Give file a unique key (path) inside the bucket
-        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-        object_key = f"uploads/{timestamp}_{filename}"
-
-        # Generate pre-signed URL valid for 1 hour (3600 seconds)
+        print(f"\n[UPLOAD REQUEST] Filename: {request.filename}, Content-Type: {request.content_type}")
+        
+        # Generate unique filename to avoid collisions
+        file_extension = request.filename.split(".")[-1] if "." in request.filename else ""
+        unique_filename = f"{uuid.uuid4()}.{file_extension}" if file_extension else str(uuid.uuid4())
+        
+        # Organize files in folders with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d")
+        s3_key = f"ocr-uploads/{timestamp}/{unique_filename}"
+        
+        print(f"[S3 KEY] {s3_key}")
+        
+        # Generate presigned URL for PUT operation
         presigned_url = s3_client.generate_presigned_url(
-            "put_object",
-            Params={"Bucket": SPACES_NAME, "Key": object_key, "ContentType": "image/jpeg"},
-            ExpiresIn=3600,
+            'put_object',
+            Params={
+                'Bucket': SPACES_NAME,
+                'Key': s3_key,
+                'ContentType': request.content_type,
+                'ACL': 'public-read'  # Make uploaded files publicly readable
+            },
+            ExpiresIn=3600  # URL expires in 1 hour
         )
-
-        return JSONResponse(
-            content={
-                "upload_url": presigned_url,
-                "file_key": object_key,
-                "message": "Use this URL to upload directly to DigitalOcean Spaces."
-            }
-        )
+        
+        print(f"[PRESIGNED URL GENERATED] Success")
+        
+        # Construct public URL for DigitalOcean Spaces
+        public_url = f"https://{SPACES_NAME}.{SPACES_REGION}.digitaloceanspaces.com/{s3_key}"
+        
+        print(f"[PUBLIC URL] {public_url}")
+        
+        return {
+            "upload_url": presigned_url,
+            "public_url": public_url,
+            "s3_key": s3_key,
+            "bucket": SPACES_NAME,
+            "timestamp": timestamp
+        }
+    
+    except ClientError as e:
+        print(f"[ERROR] ClientError: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Spaces Error: {str(e)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"[ERROR] Exception: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Server Error: {str(e)}")
 
 
 # OCR Processing Endpoint
@@ -97,3 +143,84 @@ async def process_image(image_id: str):
             os.remove(local_image_path)
             print(f"Cleaned up temporary file: {local_image_path}")
 
+@app.get("/")
+async def root():
+    """Health check endpoint"""
+    return {
+        "message": "OCR Upload API is running",
+        "status": "healthy",
+        "spaces_configured": bool(SPACES_NAME and ACCESS_KEY)
+    }
+
+
+@app.get("/test-connection")
+async def test_spaces_connection():
+    """Test DigitalOcean Spaces connection"""
+    try:
+        print("\n[TEST CONNECTION] Attempting to connect to Spaces...")
+        print(f"[TEST CONNECTION] Endpoint: {SPACES_ENDPOINT}")
+        print(f"[TEST CONNECTION] Region: {SPACES_REGION}")
+        print(f"[TEST CONNECTION] Bucket: {SPACES_NAME}")
+        
+        # Try a simpler operation first - check if bucket exists
+        try:
+            s3_client.head_bucket(Bucket=SPACES_NAME)
+            print(f"[TEST CONNECTION] ✓ Bucket '{SPACES_NAME}' exists and is accessible")
+            
+            return {
+                "status": "success",
+                "message": f"Successfully connected to Space: {SPACES_NAME}",
+                "bucket_accessible": True,
+                "endpoint": SPACES_ENDPOINT,
+                "region": SPACES_REGION
+            }
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            print(f"[TEST CONNECTION] ✗ Bucket check failed with error: {error_code}")
+            
+            if error_code == '404':
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Bucket '{SPACES_NAME}' not found. Please check your SPACES_NAME configuration."
+                )
+            elif error_code == '403':
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Access denied to bucket '{SPACES_NAME}'. Check your ACCESS_KEY and SECRET_KEY."
+                )
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Bucket access error ({error_code}): {str(e)}"
+                )
+        
+    except ClientError as e:
+        print(f"[TEST CONNECTION] ClientError: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Connection failed: {str(e)}"
+        )
+    except Exception as e:
+        print(f"[TEST CONNECTION] Exception: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Unexpected error: {str(e)}"
+        )
+
+
+@app.get("/debug-config")
+async def debug_config():
+    """Debug endpoint to check configuration (NEVER use in production!)"""
+    return {
+        "spaces_region": SPACES_REGION,
+        "spaces_name": SPACES_NAME,
+        "spaces_endpoint": SPACES_ENDPOINT,
+        "access_key_set": bool(ACCESS_KEY),
+        "secret_key_set": bool(SECRET_KEY),
+        "access_key_prefix": ACCESS_KEY[:10] if ACCESS_KEY else None
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
