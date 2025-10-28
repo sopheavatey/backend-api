@@ -12,7 +12,7 @@ from helper.ocr import run_prediction
 
 
 # Load environment variables from .env
-load_dotenv()
+import load_dotenv
 
 app = FastAPI(title="Image Upload & OCR Backend")
 
