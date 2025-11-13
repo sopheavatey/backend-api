@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from botocore.exceptions import ClientError
 import boto3
 from botocore.exceptions import ClientError
+from dotenv import load_dotenv
 import os
 import uuid
 from datetime import datetime
