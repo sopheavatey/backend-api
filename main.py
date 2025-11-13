@@ -12,7 +12,8 @@ from helper.ocr import run_prediction
 
 
 # Load environment variables from .env
-import load_dotenv
+from dotenv import load_dotenv
+load_dotenv()
 
 app = FastAPI(title="Image Upload & OCR Backend")
 
@@ -153,59 +154,6 @@ async def root():
     }
 
 
-@app.get("/test-connection")
-async def test_spaces_connection():
-    """Test DigitalOcean Spaces connection"""
-    try:
-        print("\n[TEST CONNECTION] Attempting to connect to Spaces...")
-        print(f"[TEST CONNECTION] Endpoint: {SPACES_ENDPOINT}")
-        print(f"[TEST CONNECTION] Region: {SPACES_REGION}")
-        print(f"[TEST CONNECTION] Bucket: {SPACES_NAME}")
-        
-        # Try a simpler operation first - check if bucket exists
-        try:
-            s3_client.head_bucket(Bucket=SPACES_NAME)
-            print(f"[TEST CONNECTION] ✓ Bucket '{SPACES_NAME}' exists and is accessible")
-            
-            return {
-                "status": "success",
-                "message": f"Successfully connected to Space: {SPACES_NAME}",
-                "bucket_accessible": True,
-                "endpoint": SPACES_ENDPOINT,
-                "region": SPACES_REGION
-            }
-        except ClientError as e:
-            error_code = e.response['Error']['Code']
-            print(f"[TEST CONNECTION] ✗ Bucket check failed with error: {error_code}")
-            
-            if error_code == '404':
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Bucket '{SPACES_NAME}' not found. Please check your SPACES_NAME configuration."
-                )
-            elif error_code == '403':
-                raise HTTPException(
-                    status_code=403,
-                    detail=f"Access denied to bucket '{SPACES_NAME}'. Check your ACCESS_KEY and SECRET_KEY."
-                )
-            else:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Bucket access error ({error_code}): {str(e)}"
-                )
-        
-    except ClientError as e:
-        print(f"[TEST CONNECTION] ClientError: {str(e)}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Connection failed: {str(e)}"
-        )
-    except Exception as e:
-        print(f"[TEST CONNECTION] Exception: {str(e)}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Unexpected error: {str(e)}"
-        )
 
 
 @app.get("/debug-config")
