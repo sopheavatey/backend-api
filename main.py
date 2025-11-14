@@ -10,7 +10,7 @@ import os
 import uuid
 from datetime import datetime
 from helper.ocr import run_prediction
-
+from typing import List
 
 # Load environment variables from .env
 from dotenv import load_dotenv
@@ -46,64 +46,79 @@ s3_client = boto3.client(
     aws_secret_access_key=SECRET_KEY,
 )
 
-
+# Define class for type
 class UploadRequest(BaseModel):
     filename: str
     content_type: str
 
 
-@app.post("/upload")
-async def get_upload_url(request: UploadRequest):
+class FileMetadata(BaseModel):
+    filename: str
+    content_type: str
+
+class InitiateUploadRequest(BaseModel):
+    files: List[FileMetadata]
+
+class PresignedUpload(BaseModel):
+    filename: str
+    key: str
+    upload_url: str
+
+class InitiateUploadResponse(BaseModel):
+    job_id: str
+    uploads: List[PresignedUpload]
+
+class StartJobRequest(BaseModel):
+    job_id: str
+
+class OCRResult(BaseModel):
+    filename: str
+    text: str
+
+# --- Endpoint 1: Initiate Uploads ---
+
+@app.post("/api/initiate-uploads", response_model=InitiateUploadResponse)
+async def initiate_uploads(request: InitiateUploadRequest):
     """
-    Generate a presigned URL for uploading a file to DigitalOcean Spaces.
-    Returns both the upload URL and the public URL.
+    Called by React. Generates a unique Job ID and pre-signed URLs
+    for the frontend to upload files directly to S3.
     """
-    try:
-        print(f"\n[UPLOAD REQUEST] Filename: {request.filename}, Content-Type: {request.content_type}")
-        
-        # Generate unique filename to avoid collisions
-        file_extension = request.filename.split(".")[-1] if "." in request.filename else ""
-        unique_filename = f"{uuid.uuid4()}.{file_extension}" if file_extension else str(uuid.uuid4())
-        
-        # Organize files in folders with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d")
-        s3_key = f"ocr-uploads/{timestamp}/{unique_filename}"
-        
-        print(f"[S3 KEY] {s3_key}")
-        
-        # Generate presigned URL for PUT operation
-        presigned_url = s3_client.generate_presigned_url(
-            'put_object',
-            Params={
-                'Bucket': SPACES_NAME,
-                'Key': s3_key,
-                'ContentType': request.content_type,
-                'ACL': 'public-read'  # Make uploaded files publicly readable
-            },
-            ExpiresIn=3600  # URL expires in 1 hour
-        )
-        
-        print(f"[PRESIGNED URL GENERATED] Success")
-        
-        # Construct public URL for DigitalOcean Spaces
-        public_url = f"https://{SPACES_NAME}.{SPACES_REGION}.digitaloceanspaces.com/{s3_key}"
-        
-        print(f"[PUBLIC URL] {public_url}")
-        
-        return {
-            "upload_url": presigned_url,
-            "public_url": public_url,
-            "s3_key": s3_key,
-            "bucket": SPACES_NAME,
-            "timestamp": timestamp
-        }
-    
-    except ClientError as e:
-        print(f"[ERROR] ClientError: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Spaces Error: {str(e)}")
-    except Exception as e:
-        print(f"[ERROR] Exception: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Server Error: {str(e)}")
+    job_id = str(uuid.uuid4()) # Your unique session ID
+    uploads = []
+
+    for file in request.files:
+        # Create a unique key for S3
+        # e.g., "uploads/job-123-abc/image.png"
+        s3_key = f"uploads/{job_id}/{file.filename}"
+
+        try:
+            # Generate the pre-signed URL
+            presigned_url = s3_client.generate_presigned_url(
+                'put_object',
+                Params={
+                    'Bucket': SPACES_NAME,
+                    'Key': s3_key,
+                    'ContentType': file.content_type
+                },
+                ExpiresIn=3600  # URL is valid for 1 hour
+            )
+            
+            uploads.append(
+                PresignedUpload(
+                    filename=file.filename,
+                    key=s3_key,
+                    upload_url=presigned_url
+                )
+            )
+
+        except Exception as e:
+            print(f"Error generating pre-signed URL: {e}")
+            # Handle error appropriately
+            pass
+
+    return InitiateUploadResponse(job_id=job_id, uploads=uploads)
+
+
 
 
 # OCR Processing Endpoint
@@ -154,8 +169,84 @@ async def root():
         "spaces_configured": bool(SPACES_NAME and ACCESS_KEY)
     }
 
+@app.get("/api/health-check")
+async def health_check():
+    """Health check endpoint for React frontend"""
+    response = s3_client.list_objects_v2(Bucket=SPACES_NAME)
+    for obj in response.get("Contents", []):
+        return obj["Key"]
 
+@app.post("/api/get-ocr-results", response_model=List[OCRResult])
+async def get_ocr_results(request: StartJobRequest):
+    job_id = request.job_id
+    
+    # --- FIX #2: THE S3 PREFIX ---
+    # This prefix MUST match the key from Endpoint 1
+    s3_prefix = f"uploads/{job_id}/"
+    # ---
+    
+    local_download_dir = "./temp_downloads"
+    os.makedirs(local_download_dir, exist_ok=True)
+    
+    ocr_results = []
 
+    try:
+        # This will now list objects in:
+        # Bucket: "fyp-ocr-25"
+        # Prefix: "fyp-ocr-25/uploads/{job_id}/"
+        print(f"Listing objects in bucket '{SPACES_NAME}' with prefix '{s3_prefix}'")
+        list_response = s3_client.list_objects_v2(Bucket=SPACES_NAME, Prefix=s3_prefix)
+        
+        if 'Contents' not in list_response:
+            print(f"No contents found for prefix: {s3_prefix}")
+            raise HTTPException(status_code=404, detail=f"No files found for job ID: {job_id}")
+
+        # ... (rest of your function remains the same) ...
+        for obj in list_response['Contents']:
+            object_key = obj['Key']
+            filename = os.path.basename(object_key)
+            if not filename:
+                continue
+                
+            local_image_path = os.path.join(local_download_dir, filename)
+
+            try:
+                print(f"Downloading: {object_key}")
+                s3_client.download_file(SPACES_NAME, object_key, local_image_path)
+
+                print(f"Running OCR on: {filename}")
+                text, confidence = run_prediction(
+                    YOLO_MODEL_PATH, 
+                    CRNN_CHECKPOINT_PATH, 
+                    local_image_path
+                )
+                
+                ocr_results.append(
+                    OCRResult(filename=filename, text=text, confidence=confidence)
+                )
+
+            except ClientError as e:
+                print(f"S3 Error downloading {object_key}: {e}")
+                ocr_results.append(
+                    OCRResult(filename=filename, text=f"Error: S3 download error.", confidence=0.0)
+                )
+            except Exception as e:
+                print(f"Processing Error on {filename}: {e}")
+                ocr_results.append(
+                    OCRResult(filename=filename, text=f"Error: Processing failed.", confidence=0.0)
+                )
+            finally:
+                if os.path.exists(local_image_path):
+                    os.remove(local_image_path)
+
+    except ClientError as e:
+        print(f"S3 Error listing objects: {e}")
+        raise HTTPException(status_code=500, detail="Error listing files in S3.")
+
+    if not ocr_results:
+        raise HTTPException(status_code=404, detail="No files were processed.")
+
+    return ocr_results
 
 @app.get("/debug-config")
 async def debug_config():
