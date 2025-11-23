@@ -1,8 +1,9 @@
 import torch
 import cv2
 import numpy as np
+import onnxruntime as ort
 
-from model_def.MyYolo import MyYolo
+# --- IMPORTS FROM YOUR FILES ---
 from helper.util import non_max_suppression
 from helper.dataset import resize
 
@@ -10,24 +11,17 @@ from helper.dataset import resize
 # 1. PREDICTOR CLASS
 # ==========================================
 class YOLOPredictor:
-    def __init__(self, weights_path, device='cuda'):
-        self.device = device
-        print(f"Loading Custom YOLO from {weights_path}...")
+    def __init__(self, onnx_model_path, providers=['CPUExecutionProvider']):
+        """
+        Initializes the ONNX Runtime session for YOLO.
+        """
+        print(f"Loading ONNX YOLO from {onnx_model_path}...")
+        self.session = ort.InferenceSession(onnx_model_path, providers=providers)
         
-        self.model = MyYolo(num_class=1)
-        self.model.to(self.device)
-        
-        # Load Weights
-        checkpoint = torch.load(weights_path, map_location=self.device, weights_only=False)
-        if 'model' in checkpoint:
-            state_dict = checkpoint['model'].state_dict() if hasattr(checkpoint['model'], 'state_dict') else checkpoint['model']
-        else:
-            state_dict = checkpoint
-            
-        self.model.load_state_dict(state_dict, strict=False)
-        self.model.build(input_size=640)
-        self.model.eval()
-        print("Model loaded.")
+        # Get input/output names dynamically
+        self.input_name = self.session.get_inputs()[0].name
+        self.output_name = self.session.get_outputs()[0].name
+        print("ONNX Model loaded.")
 
     def predict(self, image_path, conf=0.25, iou=0.7, img_size=640):
         # --- A. Preprocessing (Using dataset.py) ---
@@ -38,26 +32,33 @@ class YOLOPredictor:
         # It returns: image, (ratio_x, ratio_y), (pad_w, pad_h)
         img_resized, ratio, pad = resize(img_cv, img_size, augment=False)
         
-        # Convert to Tensor (Logic from Dataset.__getitem__)
-        img_tensor = img_resized.transpose((2, 0, 1))[::-1]  # HWC->CHW, BGR->RGB
-        img_tensor = np.ascontiguousarray(img_tensor)
-        img_tensor = torch.from_numpy(img_tensor).to(self.device).float()
-        img_tensor /= 255.0
-        img_tensor = img_tensor.unsqueeze(0)
+        # Prepare Blob for ONNX (HWC -> CHW, BGR -> RGB, Normalize)
+        # ONNX expects a Float32 NumPy array, not a Tensor
+        blob = img_resized.transpose((2, 0, 1))[::-1]  # HWC -> CHW, BGR -> RGB
+        blob = np.ascontiguousarray(blob).astype(np.float32)
+        blob /= 255.0
+        blob = np.expand_dims(blob, axis=0)  # Add batch dimension [1, 3, 640, 640]
 
-        # --- B. Inference ---
-        with torch.no_grad():
-            preds = self.model(img_tensor)
+        # --- B. Inference (ONNX) ---
+        # This replaces 'preds = self.model(img_tensor)'
+        outputs = self.session.run([self.output_name], {self.input_name: blob})
+        
+        # ONNX Output is a NumPy array [1, 5, 8400]
+        raw_preds_numpy = outputs[0]
 
-        # --- C. Post-Processing (Using util.py) ---
+        # --- C. Post-Processing ---
+        # We convert back to PyTorch tensor ONLY for NMS because
+        # your 'non_max_suppression' function relies on torchvision.ops.nms
+        preds_tensor = torch.from_numpy(raw_preds_numpy)
+        # --- D. Post-Processing (Using util.py) ---
         # non_max_suppression handles score filtering and NMS
-        nms_output = non_max_suppression(preds, conf, iou)
+        nms_output = non_max_suppression(preds_tensor, conf, iou)
         
         det = nms_output[0] # Get first batch item
         if det is None or len(det) == 0:
             return []
             
-        # --- D. Rescaling (The only manual math needed) ---
+        # --- E. Rescaling (The only manual math needed) ---
         # We reverse the 'resize' operations: subtract pad, then divide by ratio
         boxes = det[:, :4].clone()
         pad_w, pad_h = pad

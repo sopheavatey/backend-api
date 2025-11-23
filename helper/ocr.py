@@ -1,8 +1,5 @@
-import torch
 import PIL.Image as Image
 from torchvision import transforms
-from helper.yolo_inference import YOLOPredictor
-from helper.crnn_inference import CRNNPredictor
 
 class Config: # OUR MODEL ONLY SUPPORT THIS SIZE
     IMG_HEIGHT = 40
@@ -100,9 +97,13 @@ class ResizeAndPad:
 # =====================================================================================
 # THE MAIN PREDICTION PIPELINE
 # =====================================================================================
-def run_prediction(yolo_model_path, crnn_checkpoint_path, source_image_path):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
+def run_prediction(yolo_model_path, crnn_checkpoint_path, source_image_path, mode='production'):
+    if mode == "production":
+        from helper.yolo_inference import YOLOPredictor
+        from helper.crnn_inference import CRNNPredictor
+    else:
+        from helper.yolo_inference_old import YOLOPredictor
+        from helper.crnn_inference_old import CRNNPredictor
 
     # =====================================================================================
     # STEP 1: LOAD THE MODEL

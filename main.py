@@ -34,8 +34,9 @@ SPACES_ENDPOINT = os.getenv("SPACES_ENDPOINT")
 ACCESS_KEY = os.getenv("ACCESS_KEY")
 SECRET_KEY = os.getenv("SECRET_KEY")
 
-YOLO_MODEL_PATH = "model/yolo_best_inference.pt"
-CRNN_CHECKPOINT_PATH = "model/crnn_best.onnx"
+YOLO_MODEL_PATH = os.getenv("YOLO_MODEL", "model/yolo_best.pt")
+CRNN_MODEL_PATH = os.getenv("CRNN_MODEL", "model/crnn_best.pth")
+OCR_MODE = os.getenv("OCR_MODE", "dev")
 
 #Create a boto3 client for Spaces 
 s3_client = boto3.client(
@@ -142,8 +143,9 @@ async def process_image(image_id: str):
 
         text = run_prediction(
             YOLO_MODEL_PATH, 
-            CRNN_CHECKPOINT_PATH, 
-            local_image_path
+            CRNN_MODEL_PATH, 
+            local_image_path,
+            OCR_MODE
         )
         
         return {"image_id": image_id, "extracted_text": text}
@@ -166,7 +168,10 @@ async def root():
     return {
         "message": "OCR Upload API is running",
         "status": "healthy",
-        "spaces_configured": bool(SPACES_NAME and ACCESS_KEY)
+        "spaces_configured": bool(SPACES_NAME and ACCESS_KEY),
+        "ocr_mode": OCR_MODE,
+        "yolo_model": "onnx" if YOLO_MODEL_PATH.endswith(".onnx") else "default",
+        "crnn_model": "onnx" if CRNN_MODEL_PATH.endswith(".onnx") else "default"
     }
 
 @app.get("/api/health-check")
@@ -217,8 +222,9 @@ async def get_ocr_results(request: StartJobRequest):
                 print(f"Running OCR on: {filename}")
                 text = run_prediction(
                     YOLO_MODEL_PATH, 
-                    CRNN_CHECKPOINT_PATH, 
-                    local_image_path
+                    CRNN_MODEL_PATH, 
+                    local_image_path,
+                    OCR_MODE
                 )
                 
                 ocr_results.append(

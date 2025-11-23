@@ -1,6 +1,6 @@
 import onnxruntime as ort
 import numpy as np
-import torch
+from torch import Tensor
 
 # =====================================================================================
 # CONFIGURATION & CHARACTER SET
@@ -68,7 +68,7 @@ class CRNNPredictor:
         """
         # 1. Convert PyTorch Tensor to Numpy
         # We assume the tensor is already normalized and on CPU (or we move it)
-        if isinstance(batch_tensor, torch.Tensor):
+        if isinstance(batch_tensor, Tensor):
             numpy_input = batch_tensor.detach().cpu().numpy()
         else:
             numpy_input = batch_tensor
