@@ -34,8 +34,8 @@ SPACES_ENDPOINT = os.getenv("SPACES_ENDPOINT")
 ACCESS_KEY = os.getenv("ACCESS_KEY")
 SECRET_KEY = os.getenv("SECRET_KEY")
 
-YOLO_MODEL_PATH = "./model/YOLO.pt"
-CRNN_CHECKPOINT_PATH = "./model/CRNN.pth"
+YOLO_MODEL_PATH = "model/yolo_best_inference.pt"
+CRNN_CHECKPOINT_PATH = "model/crnn_best.onnx"
 
 #Create a boto3 client for Spaces 
 s3_client = boto3.client(

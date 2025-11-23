@@ -1,7 +1,12 @@
 import torch
-
+import PIL.Image as Image
+from torchvision import transforms
 from yolo_inference import YOLOPredictor
 from crnn_inference import CRNNPredictor
+
+class Config: # OUR MODEL ONLY SUPPORT THIS SIZE
+    IMG_HEIGHT = 40
+    IMG_WIDTH = 64
 
 def sort_words_into_lines(boxes):
     """
@@ -43,7 +48,7 @@ def sort_words_into_lines(boxes):
 
         # Threshold: If the vertical distance between centers is less than 
         # half the height of the previous character, consider it the same line.
-        # You can adjust 0.5 (50%) if your text is very wavy or tight.
+        # You can adjust 0.5 (50%) if our text is very wavy or tight.
         if abs(cy - prev_cy) < prev_h * 0.5:
             current_line.append(box)
         else:
@@ -63,18 +68,53 @@ def sort_words_into_lines(boxes):
 
 
 # =====================================================================================
-# STEP 3: THE MAIN PREDICTION PIPELINE
+# RESIZE AND PADDING THE IMAGE PREPARE FOR CRNN
+# =====================================================================================
+class ResizeAndPad:
+    def __init__(self, height, width, fill=(0, 0, 0)):
+        self.height = height
+        self.width = width
+        self.fill = fill
+
+    def __call__(self, img):
+        original_width, original_height = img.size
+        target_aspect = self.width / self.height
+        original_aspect = original_width / original_height
+        if original_aspect > target_aspect:
+            new_width = self.width
+            new_height = int(new_width / original_aspect)
+            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            new_img = Image.new(img.mode, (self.width, self.height), self.fill)
+            paste_y = (self.height - new_height) // 2
+            new_img.paste(img, (0, paste_y))
+        else:
+            new_height = self.height
+            new_width = int(new_height * original_aspect)
+            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            new_img = Image.new(img.mode, (self.width, self.height), self.fill)
+            paste_x = (self.width - new_width) // 2
+            new_img.paste(img, (paste_x, 0))
+        return new_img
+
+
+# =====================================================================================
+# THE MAIN PREDICTION PIPELINE
 # =====================================================================================
 def run_prediction(yolo_model_path, crnn_checkpoint_path, source_image_path):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
+    # =====================================================================================
+    # STEP 1: LOAD THE MODEL
+    # =====================================================================================
     print("Loading models...")
     yolo_model = YOLOPredictor(yolo_model_path)
     crnn_model = CRNNPredictor(crnn_checkpoint_path)
     print("Models loaded successfully.")
 
-    # print("Running word detection...")
+    # =====================================================================================
+    # STEP 2: RUNNING YOLO DETECTION
+    # =====================================================================================
     boxes_xyxy = yolo_model.predict(
         image_path=source_image_path,
         conf=0.25,
@@ -85,14 +125,38 @@ def run_prediction(yolo_model_path, crnn_checkpoint_path, source_image_path):
         print("No words detected.")
         return ""
 
+    # =====================================================================================
+    # STEP 3: SORTING THE DETECTION OUTPUT
+    # =====================================================================================
     ordered_lines_of_boxes = sort_words_into_lines(boxes_xyxy)
 
-    decoded_word_list = crnn_model.predict(
-        image_path=source_image_path, 
-        lines_of_boxes=ordered_lines_of_boxes
-    )
+    # =====================================================================================
+    # STEP 4: RESIZE-PADDING-NORMALIZE THEN CONVERT IT TO BATCH OF TENSORS
+    # =====================================================================================
+    transform = transforms.Compose([
+            ResizeAndPad(Config.IMG_HEIGHT, Config.IMG_WIDTH),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
+
+    batch_tensors = []
+    main_image = Image.open(source_image_path).convert("RGB")
+
+    for line in ordered_lines_of_boxes:
+        for box in line:
+            xmin, ymin, xmax, ymax = map(int, box)
+            cropped_word_img = main_image.crop((xmin, ymin, xmax, ymax))
+            transformed_tensor = transform(cropped_word_img)
+            batch_tensors.append(transformed_tensor)
+
+    # =====================================================================================
+    # STEP 5: RUNNING CRNN RECOGNITION
+    # =====================================================================================
+    decoded_word_list = crnn_model.predict(batch_tensor=batch_tensors)
     
-    # print("\n--- Recognition Complete ---")
+    # =====================================================================================
+    # STEP 6: RECONSTRUCT THE LINE OF TEXT
+    # =====================================================================================
     final_text = []
     word_counter = 0
     for line in ordered_lines_of_boxes:
@@ -100,7 +164,7 @@ def run_prediction(yolo_model_path, crnn_checkpoint_path, source_image_path):
         final_text.append(line_text)
         word_counter += len(line)
 
-    # Print the final result
+    # OPTIONAL PRINT OUTPUT
     full_page_text = "\n".join(final_text)
     print("Recognized Text:\n")
     print(full_page_text)
@@ -114,9 +178,9 @@ def run_prediction(yolo_model_path, crnn_checkpoint_path, source_image_path):
 # =====================================================================================
 # if __name__ == '__main__':
 #     # --- IMPORTANT: UPDATE THESE PATHS ---
-#     YOLO_MODEL_PATH = "yolo_best_inference.pt" # Your trained YOLOv8 model
-#     CRNN_CHECKPOINT_PATH = "crnn_best_inference.pth" # Your trained CRNN checkpoint
-#     TEST_IMAGE_PATH = "./test2.jpg" # The image you want to recognize
+#     YOLO_MODEL_PATH = "yolo_best_inference.pt" # Our trained YOLOv8 model
+#     CRNN_CHECKPOINT_PATH = "crnn_best.onnx" # Our trained CRNN checkpoint
+#     TEST_IMAGE_PATH = "./test1.jpg" # The image you want to recognize
 
 #     if not os.path.exists(YOLO_MODEL_PATH):
 #         print(f"Error: YOLO model not found at '{YOLO_MODEL_PATH}'")
