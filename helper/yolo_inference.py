@@ -3,8 +3,8 @@ import cv2
 import numpy as np
 
 from model_def.MyYolo import MyYolo
-from util import non_max_suppression
-from dataset import resize
+from helper.util import non_max_suppression
+from helper.dataset import resize
 
 # ==========================================
 # 1. PREDICTOR CLASS

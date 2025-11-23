@@ -1,8 +1,8 @@
 import torch
 import PIL.Image as Image
 from torchvision import transforms
-from yolo_inference import YOLOPredictor
-from crnn_inference import CRNNPredictor
+from helper.yolo_inference import YOLOPredictor
+from helper.crnn_inference import CRNNPredictor
 
 class Config: # OUR MODEL ONLY SUPPORT THIS SIZE
     IMG_HEIGHT = 40
