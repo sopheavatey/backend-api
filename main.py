@@ -40,8 +40,8 @@ CRNN_CHECKPOINT_PATH = "./model/CRNN.pth"
 #Create a boto3 client for Spaces 
 s3_client = boto3.client(
     "s3",
-    region_name=SPACES_REGION,
-    endpoint_url=SPACES_ENDPOINT,
+    region_name="sgp1",
+    endpoint_url="https://sgp1.digitaloceanspaces.com",
     aws_access_key_id=ACCESS_KEY,
     aws_secret_access_key=SECRET_KEY,
 )
@@ -215,25 +215,25 @@ async def get_ocr_results(request: StartJobRequest):
                 s3_client.download_file(SPACES_NAME, object_key, local_image_path)
 
                 print(f"Running OCR on: {filename}")
-                text, confidence = run_prediction(
+                text = run_prediction(
                     YOLO_MODEL_PATH, 
                     CRNN_CHECKPOINT_PATH, 
                     local_image_path
                 )
                 
                 ocr_results.append(
-                    OCRResult(filename=filename, text=text, confidence=confidence)
+                    OCRResult(filename=filename, text=text)
                 )
 
             except ClientError as e:
                 print(f"S3 Error downloading {object_key}: {e}")
                 ocr_results.append(
-                    OCRResult(filename=filename, text=f"Error: S3 download error.", confidence=0.0)
+                    OCRResult(filename=filename, text=f"Error: S3 download error.")
                 )
             except Exception as e:
                 print(f"Processing Error on {filename}: {e}")
                 ocr_results.append(
-                    OCRResult(filename=filename, text=f"Error: Processing failed.", confidence=0.0)
+                    OCRResult(filename=filename, text=f"Error: Processing failed.")
                 )
             finally:
                 if os.path.exists(local_image_path):
