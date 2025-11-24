@@ -1,5 +1,5 @@
 # main.py
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from botocore.exceptions import ClientError
@@ -10,7 +10,12 @@ import os
 import uuid
 from datetime import datetime
 from helper.ocr import run_prediction
-from typing import List
+from typing import List, Annotated
+
+# auth import
+from auth.auth import router as auth_router, get_current_user 
+from auth.database import engine
+from auth import models
 
 # Load environment variables from .env
 from dotenv import load_dotenv
@@ -26,6 +31,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# auth router & user dependency
+app.include_router(auth_router, prefix="/auth") 
+user_dependency = Annotated[dict, Depends(get_current_user)]
 
 # DigitalOcean Spaces Configuration
 SPACES_REGION = os.getenv("SPACES_REGION")
@@ -79,7 +88,7 @@ class OCRResult(BaseModel):
 # --- Endpoint 1: Initiate Uploads ---
 
 @app.post("/api/initiate-uploads", response_model=InitiateUploadResponse)
-async def initiate_uploads(request: InitiateUploadRequest):
+async def initiate_uploads(request: InitiateUploadRequest, user: user_dependency): #add user dependency
     """
     Called by React. Generates a unique Job ID and pre-signed URLs
     for the frontend to upload files directly to S3.
@@ -182,7 +191,7 @@ async def health_check():
         return obj["Key"]
 
 @app.post("/api/get-ocr-results", response_model=List[OCRResult])
-async def get_ocr_results(request: StartJobRequest):
+async def get_ocr_results(request: StartJobRequest, user: user_dependency): #add user dependency
     job_id = request.job_id
     
     # --- FIX #2: THE S3 PREFIX ---
