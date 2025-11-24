@@ -1,4 +1,4 @@
-from database import Base 
+from auth.database import Base 
 from sqlalchemy import Column, Integer, String 
 
 class Users(Base):
