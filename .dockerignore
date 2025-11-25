@@ -1,0 +1,19 @@
+# Ignore secrets
+.env
+.env.*
+
+# Ignore git history
+.git
+.gitignore
+
+# Ignore Python junk
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv/
+.pytest_cache/
+
+# Ignore Mac junk
+.DS_Store
