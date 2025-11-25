@@ -1,6 +1,6 @@
 from datetime import timedelta
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -9,6 +9,7 @@ from middleware.auth.database import SessionLocal
 from middleware.auth.models import Users
 from middleware.auth.auth_service import authenticate_user, create_access_token, hash_password
 from middleware.auth.auth_deps import db_dependency, user_dependency
+from core.config import settings
 
 router = APIRouter(
     prefix= '/auth',
@@ -41,11 +42,15 @@ async def create_user(db: db_dependency,
     return {"message": "User successfully registered"}
 
 @router.post("/token", response_model=Token)
-async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-                                 db: db_dependency):
-    """Login and get an access token."""
-    
-    # Use the service function for authentication
+async def login_for_access_token(
+    response: Response, # <--- Injected Response object to access cookies
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: db_dependency
+):
+    """
+    Login user. 
+    Sets a secure HttpOnly cookie AND returns the token in the body.
+    """
     user = authenticate_user(form_data.username, form_data.password, db)
 
     if not user:
@@ -55,12 +60,29 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Create token, timedelta is passed as None to use the default from settings
-    token = create_access_token(user.username, user.id, user.email, expires_delta=None) 
+    # Create the token
+    token_str = create_access_token(user.username, user.id, user.email, expires_delta=None) 
 
-    return {'access_token': token, 'token_type': 'bearer'}
+    # --- Set the token in a generic HttpOnly Cookie ---
+    response.set_cookie(
+        key="access_token",           # Name of the cookie
+        value=token_str,              # The JWT token
+        httponly=True,                # Javascript cannot access this (Prevents XSS)
+        secure=False,                 # Set to True in Production (requires HTTPS)
+        samesite="lax",               # CSRF protection
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60 # Expiration in seconds
+    )
 
-# Simple test endpoint to verify authentication is working
+    return {'access_token': token_str, 'token_type': 'bearer'}
+
+@router.post("/logout")
+async def logout(response: Response):
+    """
+    Logout user by clearing the cookie.
+    """
+    response.delete_cookie(key="access_token")
+    return {"message": "Successfully logged out"}
+
 @router.get("/me", status_code=status.HTTP_200_OK)
 async def get_user_info(user: user_dependency):
     """Returns the current authenticated user's data."""
