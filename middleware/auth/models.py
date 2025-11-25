@@ -1,5 +1,5 @@
-from auth.database import Base 
 from sqlalchemy import Column, Integer, String 
+from middleware.auth.database import Base 
 
 class Users(Base):
     __tablename__= 'users'
@@ -8,4 +8,3 @@ class Users(Base):
     username = Column(String, unique=True)
     email = Column(String, unique=True)
     hashed_password = Column(String)
-
