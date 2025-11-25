@@ -33,7 +33,7 @@ async def create_user(db: db_dependency,
     create_user_model = Users(
         username = create_user_request.username,
         email = create_user_request.email,
-        hashed_password = hash_password(create_user_request.password), # Use the service function
+        password_hash = hash_password(create_user_request.password), # Use the service function
     )
 
     db.add(create_user_model)
