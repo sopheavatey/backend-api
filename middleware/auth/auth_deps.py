@@ -1,5 +1,5 @@
 from typing import Annotated, Generator
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
@@ -10,7 +10,29 @@ from schemas.auth_schema import UserData
 
 # Dependencies
 db_dependency = Annotated[Session, Depends(get_db)]
-oauth2_bearer = OAuth2PasswordBearer(tokenUrl='/auth/token')
+oauth2_bearer = OAuth2PasswordBearer(tokenUrl='/auth/token', auto_error=False)
+
+
+def get_token_from_cookie_or_header(request: Request, token_header: str | None = Depends(oauth2_bearer)) -> str:
+    """
+    Custom dependency to retrieve the token.
+    Priority 1: HttpOnly Cookie (access_token)
+    Priority 2: Authorization Header (Bearer ...)
+    """
+    # 1. Try to get from Cookie
+    token_cookie = request.cookies.get("access_token")
+    if token_cookie:
+        return token_cookie
+    
+    # 2. Try to get from Header (if cookie missing)
+    if token_header:
+        return token_header
+        
+    # 3. If neither, raise error
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated. No token found in cookie or header.",
+    )
 
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_bearer)]) -> UserData:

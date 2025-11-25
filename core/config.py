@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # JWT Authentication Settings
     JWT_SECRET_KEY: str
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30
 
     # Database Configuration - using the exact env variable names from database.py
     DB_USER: str = os.getenv("username")
@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     # Pre-calculate the full URL outside of the class if necessary for SQLAlchemy
     @property
     def DATABASE_URL(self):
-        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?sslmode={self.DB_SSLMODE}"
+        return f"postgresql://doadmin:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?sslmode={self.DB_SSLMODE}"
+        # return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?sslmode={self.DB_SSLMODE}"
 
 settings = Settings()
