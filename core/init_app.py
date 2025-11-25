@@ -4,7 +4,7 @@ import logging
 
 from core.config import settings
 from middleware.auth import auth_router, models as auth_models, database as auth_database
-from routers import ocr_router
+from routers import ocr_router, telegram_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -34,7 +34,10 @@ def create_application() -> FastAPI:
     app.include_router(auth_router.router)
     # OCR/Upload Router
     app.include_router(ocr_router.router)
-    
+
+    app.include_router(auth_router.router)
+    app.include_router(ocr_router.router)
+    app.include_router(telegram_router.router)
     # 4. Root & Health Check Endpoints
     @app.get("/")
     async def root():

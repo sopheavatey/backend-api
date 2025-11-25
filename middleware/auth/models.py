@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String 
+from sqlalchemy import Column, Integer, String, BigInteger
 from middleware.auth.database import Base 
 
 class Users(Base):
@@ -8,3 +8,5 @@ class Users(Base):
     username = Column(String, unique=True)
     email = Column(String, unique=True)
     password_hash = Column(String)
+    # New column to link Telegram accounts
+    telegram_chat_id = Column(BigInteger, unique=True, nullable=True)

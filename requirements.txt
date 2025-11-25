@@ -13,3 +13,4 @@ python-jose
 psycopg2-binary
 pydantic_settings
 bcrypt==3.2.2
+python-telegram-bot

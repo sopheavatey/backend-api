@@ -20,9 +20,13 @@ class Settings(BaseSettings):
     SECRET_KEY: str
 
     # OCR Model Paths
-    YOLO_MODEL_PATH: str = "ai_model_weight/yolo_best.pt"
-    CRNN_MODEL_PATH: str = "ai_model_weight/crnn_best.pth"
-    OCR_MODE: str = "dev" # e.g., 'dev' or 'prod' (pytorch or onnx)
+    YOLO_MODEL_PATH: str = "ai_model/yolo_best.onnx"
+    CRNN_MODEL_PATH: str = "ai_model/crnn_best.onnx"
+    OCR_MODE: str = "production" # e.g., 'dev' or 'prod' (pytorch or onnx)
+
+    # Telegram Bot Configuration
+    TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN")
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL")
 
     # JWT Authentication Settings
     JWT_SECRET_KEY: str
