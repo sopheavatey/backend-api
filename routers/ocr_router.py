@@ -15,7 +15,7 @@ from core.config import settings
 from helper.ocr import run_prediction # Unchanged external dependency
 
 router = APIRouter(
-    prefix="/api",
+    prefix="/ocr",
     tags=["ocr", "upload"],
 )
 
