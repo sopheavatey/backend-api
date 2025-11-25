@@ -31,7 +31,7 @@ def create_application() -> FastAPI:
     
     # 3. Include Routers
     # Auth Router
-    app.include_router(auth_router.router, prefix="/auth")
+    app.include_router(auth_router.router)
     # OCR/Upload Router
     app.include_router(ocr_router.router)
     

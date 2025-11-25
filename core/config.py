@@ -10,7 +10,7 @@ load_dotenv()
 class Settings(BaseSettings):
     # Core App Settings
     PROJECT_NAME: str = "OCR Upload API"
-    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+    CORS_ORIGINS: list[str] = ["*"]
 
     # DigitalOcean Spaces Configuration
     SPACES_REGION: str
