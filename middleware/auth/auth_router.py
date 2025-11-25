@@ -19,8 +19,6 @@ router = APIRouter(
 @router.post("/register", status_code=status.HTTP_201_CREATED) 
 async def create_user(db: db_dependency,
                       create_user_request: CreateUserRequest):
-    """Register a new user."""
-    # Check if username or email already exists
     if db.query(Users).filter(
         (Users.username == create_user_request.username) | 
         (Users.email == create_user_request.email)
@@ -30,11 +28,10 @@ async def create_user(db: db_dependency,
             detail="Username or email already registered."
         )
     
-    # Create the new user model
     create_user_model = Users(
         username = create_user_request.username,
         email = create_user_request.email,
-        password_hash = hash_password(create_user_request.password), # Use the service function
+        password_hash = hash_password(create_user_request.password),
     )
 
     db.add(create_user_model)
@@ -43,14 +40,10 @@ async def create_user(db: db_dependency,
 
 @router.post("/token", response_model=Token)
 async def login_for_access_token(
-    response: Response, # <--- Injected Response object to access cookies
+    response: Response,
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     db: db_dependency
 ):
-    """
-    Login user. 
-    Sets a secure HttpOnly cookie AND returns the token in the body.
-    """
     user = authenticate_user(form_data.username, form_data.password, db)
 
     if not user:
@@ -60,30 +53,26 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Create the token
     token_str = create_access_token(user.username, user.id, user.email, expires_delta=None) 
 
-    # --- Set the token in a generic HttpOnly Cookie ---
+    # We set BOTH cookie and return token body to support both auth methods
     response.set_cookie(
-        key="access_token",           # Name of the cookie
-        value=token_str,              # The JWT token
-        httponly=True,                # Javascript cannot access this (Prevents XSS)
-        secure=False,                 # Set to True in Production (requires HTTPS)
-        samesite="lax",               # CSRF protection
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60 # Expiration in seconds
+        key="access_token",
+        value=token_str,
+        httponly=True,
+        secure=False, # Set True in Prod
+        samesite="lax",
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
 
     return {'access_token': token_str, 'token_type': 'bearer'}
 
 @router.post("/logout")
 async def logout(response: Response):
-    """
-    Logout user by clearing the cookie.
-    """
     response.delete_cookie(key="access_token")
     return {"message": "Successfully logged out"}
 
 @router.get("/me", status_code=status.HTTP_200_OK)
 async def get_user_info(user: user_dependency):
-    """Returns the current authenticated user's data."""
+    # Return user data directly so frontend can use it
     return {"user": user}

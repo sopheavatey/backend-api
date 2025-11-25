@@ -73,5 +73,6 @@ def list_files_in_prefix(s3_prefix: str) -> list[str]:
         # Return only the keys that represent actual files
         return [obj['Key'] for obj in list_response['Contents'] if obj['Size'] > 0]
         
-    except ClientError as e:
-        raise ClientError(f"Error listing objects in prefix {s3_prefix}: {e}", operation_name='list_objects')
+    except Exception as e:
+            print(f"S3 LIST ERROR: {e}")  # This will print the real error to your logs
+            raise e  # Raise the original error, don't try to wrap it
