@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     # Pre-calculate the full URL outside of the class if necessary for SQLAlchemy
     @property
     def DATABASE_URL(self):
-        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?sslmode={self.DB_SSLMODE}"
+        return f"postgresql://doadmin:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?sslmode={self.DB_SSLMODE}"
+        # return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?sslmode={self.DB_SSLMODE}"
 
 settings = Settings()
