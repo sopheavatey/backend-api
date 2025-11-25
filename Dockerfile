@@ -25,6 +25,6 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # 6. Copy the rest of your application code
 COPY . .
 
-# 7. Command to run the app
-# Adjust 'main:app' if your file is named something else
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]
+# 5. The command to start your app
+# Adjust 'main:app' to match your FastAPI/Flask file name
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
