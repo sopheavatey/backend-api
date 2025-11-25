@@ -9,3 +9,6 @@ test*
 output.txt
 
 test*
+
+venv/
+.python-version
