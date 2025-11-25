@@ -1,26 +1,30 @@
-# Use a lightweight Python base image
+# 1. Base Image: Python 3.10 is stable for Torch/ONNX
 FROM python:3.10-slim
 
-# Set the working directory inside the container
+# 2. Set working directory
 WORKDIR /app
 
-# 1. Install System Dependencies (CRITICAL for YOLO/OpenCV)
-# OpenCV needs these graphics libraries to run, even without a monitor.
+# 3. Install System Dependencies
+# - build-essential: needed for compiling some python packages (like bcrypt)
+# - libgl1 & libglib2.0-0: REQUIRED for 'opencv-python' to work
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+    build-essential \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Copy ONLY requirements.txt first
+# 4. Copy requirements first (to cache dependencies)
 COPY requirements.txt .
 
-# 3. Install Python dependencies
-# --no-cache-dir keeps the image smaller
-RUN pip install --no-cache-dir -r requirements.txt
+# 5. Install Python Dependencies
+# --no-cache-dir reduces image size
+# We split Torch to ensure we get the CPU version (much smaller) if you don't have a GPU
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# 4. NOW copy the rest of your source code
+# 6. Copy the rest of your application code
 COPY . .
 
-# 5. The command to start your app
-# Adjust 'main:app' to match your FastAPI/Flask file name
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 7. Command to run the app
+# Adjust 'main:app' if your file is named something else
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]
